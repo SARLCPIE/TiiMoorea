@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Commande Souvenirs</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+    }
+    h1, h2 {
+      text-align: center;
+    }
+    .categorie {
+      margin-top: 40px;
+    }
+    .produits {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      justify-content: center;
+    }
+    .produit {
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      padding: 10px;
+      width: 160px;
+      text-align: center;
+    }
+    .produit img {
+      width: 100%;
+      height: auto;
+    }
+    .client-select, .total, .export {
+      text-align: center;
+      margin-top: 20px;
+    }
+    .total {
+      font-weight: bold;
+    }
+  </style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+</head>
+<body>
+  <h1>Commande Souvenirs</h1>
+  <div class="client-select">
+  <label for="client">Client :</label>
+  <input type="text" id="client" placeholder="Nom du client" />
+</div>
+
+  <div id="produitsContainer"></div>
+  <div class="total" id="total">
+    Total HT : 0 CFP
+    <br />TVA (16%) : 0 CFP
+    <br />TOTAL TTC : 0 CFP
+  </div>
+<div class="export">
+  <button onclick="exportPDF()">Exporter en PDF</button>
+  <button onclick="envoyerCommande()">Envoyer la commande</button>
+</div>
+
+<script>
+const produits = [
+    // Décapsuleurs (à 345 frs)
+    { id: 1, nom: "Bo Mag Flag", prix: 345, image: "images/bo-mag-flag.png", categorie: "Décapsuleurs" },
+    { id: 2, nom: "Bo Mag Rai", prix: 345, image: "images/bo-mag-rai.png", categorie: "Décapsuleurs" },
+    { id: 3, nom: "Bo Mag Tor", prix: 345, image: "images/bo-mag-tor.png", categorie: "Décapsuleurs" },
+    { id: 4, nom: "Bo Pc Flag", prix: 345, image: "images/bo-pc-flag.png", categorie: "Décapsuleurs" },
+    { id: 5, nom: "Bo Pc Rai", prix: 345, image: "images/bo-pc-rai.png", categorie: "Décapsuleurs" },
+    { id: 6, nom: "Bo Pc Tor", prix: 345, image: "images/bo-pc-tor.png", categorie: "Décapsuleurs" },
+
+    // Dessous de verre (à 95 frs)
+    { id: 7, nom: "COA LEZ", prix: 95, image: "images/coa-lez.png", categorie: "Dessous de verre" },
+    { id: 8, nom: "COA FLAG", prix: 95, image: "images/coa-flag.png", categorie: "Dessous de verre" },
+    { id: 9, nom: "COA HIB", prix: 95, image: "images/coa-hib.png", categorie: "Dessous de verre" },
+    { id: 10, nom: "COA PAT", prix: 95, image: "images/coa-pat.png", categorie: "Dessous de verre" },
+    { id: 11, nom: "COA RAI", prix: 95, image: "images/coa-rai.png", categorie: "Dessous de verre" },
+    { id: 12, nom: "COA TOR", prix: 95, image: "images/coa-tor.png", categorie: "Dessous de verre" },
+
+    // Dessous de plat (à 430 frs)
+    { id: 13, nom: "COAB FLAG", prix: 430, image: "images/coa-flag.png", categorie: "Dessous de plat" },
+    { id: 14, nom: "COAB TOR", prix: 430, image: "images/coa-tor.png", categorie: "Dessous de plat" },
+
+    // Miroirs (à 345 frs)
+    { id: 15, nom: "Mir Comp Flag", prix: 345, image: "images/mir-comp-flag.png", categorie: "Miroirs" },
+    { id: 16, nom: "Mir Comp Hib", prix: 345, image: "images/mir-comp-hib.png", categorie: "Miroirs" },
+    { id: 17, nom: "Mir Comp Rai", prix: 345, image: "images/mir-comp-rai.png", categorie: "Miroirs" },
+    { id: 18, nom: "Mir Comp Tor", prix: 345, image: "images/mir-comp-tor.png", categorie: "Miroirs" },
+
+    // Boîtes de shooters (à 520 frs)
+    { id: 19, nom: "Shot Box 1", prix: 520, image: "images/shot-box-1.png", categorie: "Boîtes de shooters" },
+    { id: 20, nom: "Shot Box 2", prix: 520, image: "images/shot-box-2.png", categorie: "Boîtes de shooters" }
+];
+
+// Tarifs de gros
+const tarifsGros = {
+  "Décapsuleurs": { seuil: 50, prix: 310 },
+  "Dessous de verre": { seuil: 200, prix: 85 },
+  "Dessous de plat": { seuil: 50, prix: 390 },
+  "Miroirs": { seuil: 50, prix: 310 },
+  "Boîtes de shooters": { seuil: 50, prix: 450 }
+};
+
+const container = document.getElementById("produitsContainer");
+const totalEl = document.getElementById("total");
+
+function afficherProduits() {
+  const categories = {};
+  produits.forEach(p => {
+    if (!categories[p.categorie]) categories[p.categorie] = [];
+    categories[p.categorie].push(p);
+  });
+
+  for (const [categorie, liste] of Object.entries(categories)) {
+    const section = document.createElement("div");
+    section.className = "categorie";
+    const titre = document.createElement("h2");
+    titre.textContent = categorie;
+    section.appendChild(titre);
+
+    const zone = document.createElement("div");
+    zone.className = "produits";
+
+    liste.forEach((produit) => {
+      const div = document.createElement("div");
+      div.className = "produit";
+
+      const img = document.createElement("img");
+      img.src = produit.image;
+      img.alt = produit.nom;
+
+      const nom = document.createElement("div");
+      nom.textContent = produit.nom;
+
+      const prix = document.createElement("div");
+      prix.textContent = produit.prix + " CFP HT";
+
+      const input = document.createElement("input");
+      input.type = "number";
+      input.min = "0";
+      input.value = "0";
+      input.className = "quantity-input";
+      input.dataset.id = produit.id;
+      input.addEventListener("input", calculerTotal);
+
+      div.appendChild(img);
+      div.appendChild(nom);
+      div.appendChild(prix);
+      div.appendChild(input);
+      zone.appendChild(div);
+    });
+
+    section.appendChild(zone);
+    container.appendChild(section);
+  }
+}
+
+function calculerTotal() {
+  let totalHT = 0;
+  const qtesParCategorie = {};
+
+  // Comptabiliser les quantités par catégorie
+  document.querySelectorAll(".quantity-input").forEach(input => {
+    const qte = parseInt(input.value || "0");
+    if (qte > 0) {
+      const produit = produits.find(p => p.id == input.dataset.id);
+      if (!qtesParCategorie[produit.categorie]) qtesParCategorie[produit.categorie] = 0;
+      qtesParCategorie[produit.categorie] += qte;
+    }
+  });
+
+  // Calcul du total avec tarifs de gros si applicable
+  document.querySelectorAll(".quantity-input").forEach(input => {
+    const qte = parseInt(input.value || "0");
+    if (qte > 0) {
+      const produit = produits.find(p => p.id == input.dataset.id);
+      let prixUnitaire = produit.prix;
+
+      if (tarifsGros[produit.categorie] && qtesParCategorie[produit.categorie] >= tarifsGros[produit.categorie].seuil) {
+        prixUnitaire = tarifsGros[produit.categorie].prix;
+      }
+
+      totalHT += qte * prixUnitaire;
+    }
+  });
+
+  const tva = Math.round(totalHT * 0.16);
+  const totalTTC = totalHT + tva;
+  totalEl.innerHTML =
+    "Total HT : " + totalHT + " CFP" +
+    "<br />TVA (16%) : " + tva + " CFP" +
+    "<br />TOTAL TTC : " + totalTTC + " CFP";
+}
+async function exportPDF() {
+      const client = document.getElementById('client').value;
+      if (!client) {
+        alert('Veuillez sélectionner un client.');
+        return;
+      }
+
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF();
+
+      let y = 10;
+      doc.text('Client : ' + client, 10, y);
+      y += 10;
+
+      let total = 0;
+      const quantityInputs = document.querySelectorAll('.quantity-input');
+      quantityInputs.forEach(input => {
+    const quantity = parseInt(input.value) || 0;
+    if (quantity > 0) {
+      const id = parseInt(input.dataset.id);
+      const produit = produits.find(p => p.id === id);
+      const lineTotal = quantity * produit.prix;
+      total += lineTotal;
+    doc.text(`${produit.nom} x ${quantity} = ${lineTotal} CFP`, 10, y);
+      y += 10;
+      if (y > 280) {
+        doc.addPage();
+        y = 10;
+      }
+    }
+  });
+
+      doc.text('Total : ' + total + ' CFP', 10, y + 10);
+      doc.save('commande_' + client.replace(/\s+/g, '_') + '.pdf');
+    }
+ function envoyerCommande() {
+    const client = document.getElementById('client').value;
+    if (!client) {
+      alert('Veuillez sélectionner un client.');
+      return;
+    }
+
+    const commande = [];
+    const inputs = document.querySelectorAll(".quantity-input");
+
+    inputs.forEach(input => {
+      const quantity = parseInt(input.value) || 0;
+      if (quantity > 0) {
+        const id = parseInt(input.dataset.id);
+        const produit = produits.find(p => p.id === id);
+        if (produit) {
+          commande.push({
+            produit: produit.nom,
+            quantite: quantity,
+            prix: produit.prix
+          });
+        }
+      }
+    });
+
+    if (commande.length === 0) {
+      alert("Aucun produit sélectionné.");
+      return;
+    }
+
+  let email = "tiisouvenirs@gmail.com"; // Remplace par ton adresse email
+  let sujet = "Commande de " + client;
+  let corps = "Commande de : " + client + "\n\n";
+
+  commande.forEach(item => {
+    corps += `${item.produit} x ${item.quantite} = ${item.quantite * item.prix} CFP\n`;
+  });
+
+  corps += `\nTotal : ${commande.reduce((sum, item) => sum + item.quantite * item.prix, 0)} CFP`;
+
+  let mailtoLink = `mailto:${email}?subject=${encodeURIComponent(sujet)}&body=${encodeURIComponent(corps)}`;
+  window.location.href = mailtoLink;}
+afficherProduits();
+calculerTotal();
+</script>
+</body>
+</html>
+
+
+
+
